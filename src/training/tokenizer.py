@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from tokenizers import Tokenizer, models, pre_tokenizers, trainers
+from tokenizers import Tokenizer, models, pre_tokenizers, trainers, decoders
 
 
 def train_tokenizer(
@@ -10,6 +10,7 @@ def train_tokenizer(
 ) -> Tokenizer:
     tokenizer = Tokenizer(models.BPE())
     tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
+    tokenizer.decoder = decoders.ByteLevel()
 
     trainer = trainers.BpeTrainer(
         vocab_size=vocab_size,
@@ -24,4 +25,7 @@ def train_tokenizer(
 
 
 def load_tokenizer(path: str) -> Tokenizer:
-    return Tokenizer.from_file(path)
+    tok = Tokenizer.from_file(path)
+    if tok.decoder is None:
+        tok.decoder = decoders.ByteLevel()
+    return tok
