@@ -48,6 +48,11 @@ class Trainer:
         self.global_step = 0
         self.best_loss = float("inf")
 
+        # Enable gradient checkpointing to save memory
+        if hasattr(model, "use_gradient_checkpointing"):
+            model.use_gradient_checkpointing = True
+            print("Gradient checkpointing enabled")
+
     def train(self, max_steps: int | None = None) -> dict[str, list[float]]:
         self.model.train()
         self.optimizer.zero_grad()
@@ -80,6 +85,8 @@ class Trainer:
                     self.scaler.update()
                     self.optimizer.zero_grad()
                     self.scheduler.step()
+                    if self.device == "cuda":
+                        torch.cuda.empty_cache()
 
                 if (self.global_step + 1) % self.log_interval == 0:
                     avg_loss = running_loss / self.log_interval

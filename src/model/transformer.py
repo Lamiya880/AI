@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torch.utils.checkpoint import checkpoint
 
 from .config import ModelConfig
 from .embedding import TokenEmbedding
@@ -14,6 +15,7 @@ class HybridModel(nn.Module):
     def __init__(self, config: ModelConfig):
         super().__init__()
         self.config = config
+        self.use_gradient_checkpointing = False
 
         self.embedding = TokenEmbedding(config.vocab_size, config.d_model)
 
@@ -78,11 +80,18 @@ class HybridModel(nn.Module):
         sin = self.rope_sin[: x.shape[1]]
 
         for i, (layer, moe) in enumerate(zip(self.layers, self.moe_layers)):
-            if self.config.is_attention_layer(i):
-                x = layer(x, cos, sin)
+            if self.use_gradient_checkpointing:
+                if self.config.is_attention_layer(i):
+                    x = checkpoint(layer, x, cos, sin, use_reentrant=False)
+                else:
+                    x = checkpoint(layer, x, use_reentrant=False)
+                x = x + checkpoint(moe, x, use_reentrant=False)
             else:
-                x = layer(x)
-            x = x + moe(x)
+                if self.config.is_attention_layer(i):
+                    x = layer(x, cos, sin)
+                else:
+                    x = layer(x)
+                x = x + moe(x)
 
         x = self.norm(x)
         logits = self.lm_head(x)
