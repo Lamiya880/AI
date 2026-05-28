@@ -6,7 +6,7 @@ from .config import ModelConfig
 from .embedding import TokenEmbedding
 from .attention import AttentionBlock
 from .mamba_block import MambaBlock
-from .moe import MoELayer
+from .ffn import SwiGLU
 from .norm import RMSNorm
 from .rope import precompute_rope_freqs
 
@@ -36,11 +36,9 @@ class HybridModel(nn.Module):
                     )
                 )
 
-        self.moe_layers = nn.ModuleList([
-            MoELayer(
-                config.d_model, config.expert_dim, config.num_experts,
-                config.num_shared_experts, config.moe_top_k,
-            )
+        # Standard SwiGLU FFN (fast, no MoE routing overhead)
+        self.ffn_layers = nn.ModuleList([
+            SwiGLU(config.d_model, config.expert_dim)
             for _ in range(config.n_layers)
         ])
 
@@ -79,19 +77,19 @@ class HybridModel(nn.Module):
         cos = self.rope_cos[: x.shape[1]]
         sin = self.rope_sin[: x.shape[1]]
 
-        for i, (layer, moe) in enumerate(zip(self.layers, self.moe_layers)):
+        for i, (layer, ffn) in enumerate(zip(self.layers, self.ffn_layers)):
             if self.use_gradient_checkpointing:
                 if self.config.is_attention_layer(i):
                     x = checkpoint(layer, x, cos, sin, use_reentrant=False)
                 else:
                     x = checkpoint(layer, x, use_reentrant=False)
-                x = x + checkpoint(moe, x, use_reentrant=False)
+                x = x + checkpoint(ffn, x, use_reentrant=False)
             else:
                 if self.config.is_attention_layer(i):
                     x = layer(x, cos, sin)
                 else:
                     x = layer(x)
-                x = x + moe(x)
+                x = x + ffn(x)
 
         x = self.norm(x)
         logits = self.lm_head(x)
