@@ -1,0 +1,20 @@
+d_model: 768
+n_layers: 12
+vocab_size: 32000
+max_seq_len: 4096
+attention_layer_indices: [7, 11]
+d_state: 64
+d_conv: 4
+expand: 2
+mamba_ngroups: 8
+n_heads: 12
+n_kv_heads: 4
+head_dim: 64
+num_experts: 8
+num_shared_experts: 1
+moe_top_k: 2
+expert_dim: 2048
+norm_eps: 1.0e-06
+rope_base: 10000.0
+rope_scaling: null
+use_mamba: true

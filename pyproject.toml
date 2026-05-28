@@ -1,0 +1,39 @@
+[project]
+name = "advanced-llm"
+version = "0.1.0"
+description = "Advanced LLM with Mamba-2 + Transformer hybrid, MoE, and modern architecture"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.4.0",
+    "transformers>=4.40.0",
+    "datasets>=2.19.0",
+    "tokenizers>=0.19.0",
+    "bitsandbytes>=0.43.0",
+    "accelerate>=0.30.0",
+    "wandb>=0.17.0",
+    "pyyaml>=6.0",
+    "safetensors>=0.4.0",
+    "numpy>=1.24.0",
+    "tqdm>=4.66.0",
+]
+
+[project.optional-dependencies]
+inference = [
+    "fastapi>=0.111.0",
+    "uvicorn>=0.30.0",
+    "gptqmodel>=1.0",
+]
+mamba = [
+    "mamba-ssm>=2.0",
+]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=5.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[tool.setuptools.packages.find]
+where = ["src"]

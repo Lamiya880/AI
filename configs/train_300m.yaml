@@ -1,0 +1,26 @@
+model:
+  config_path: configs/model_300m.yaml
+
+training:
+  optimizer: adamw8bit
+  lr: 0.0003
+  weight_decay: 0.1
+  warmup_steps: 1000
+  stable_steps: 80000
+  decay_steps: 500
+  grad_accum_steps: 8
+  max_grad_norm: 1.0
+  batch_size: 4
+  seq_len: 4096
+  max_steps: 91000
+  use_amp: true
+  checkpoint_dir: checkpoints
+  log_interval: 10
+  save_interval: 1000
+
+data:
+  dataset: HuggingFaceFW/fineweb-edu
+  subset: sample-10BT
+  split: train
+  tokenizer_path: tokenizer.json
+  seq_len: 4096
