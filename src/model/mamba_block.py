@@ -4,6 +4,13 @@ import torch.nn.functional as F
 
 from .norm import RMSNorm
 
+# Try to import CUDA-accelerated Mamba
+try:
+    from mamba_ssm import Mamba as CudaMamba
+    HAS_CUDA_MAMBA = True
+except ImportError:
+    HAS_CUDA_MAMBA = False
+
 
 class SelectiveSSM(nn.Module):
     def __init__(self, d_model: int, d_state: int = 64, d_conv: int = 4, expand: int = 2):
@@ -62,12 +69,32 @@ class SelectiveSSM(nn.Module):
         C: torch.Tensor,
     ) -> torch.Tensor:
         batch, seqlen, d_inner, d_state = deltaA.shape
+
+        # Chunked parallel scan: process in chunks, propagate state between chunks
+        chunk_size = 64
+        n_chunks = (seqlen + chunk_size - 1) // chunk_size
         h = torch.zeros(batch, d_inner, d_state, device=u.device, dtype=u.dtype)
         outputs = []
-        for t in range(seqlen):
-            h = deltaA[:, t] * h + deltaB[:, t] * u[:, t, :, None]
-            y_t = (h * C[:, t, None, :]).sum(dim=-1)
-            outputs.append(y_t)
+
+        for c in range(n_chunks):
+            start = c * chunk_size
+            end = min(start + chunk_size, seqlen)
+            chunk_len = end - start
+
+            # Process chunk - vectorized within chunk
+            chunk_dA = deltaA[:, start:end]  # [B, chunk, D, N]
+            chunk_dB = deltaB[:, start:end]  # [B, chunk, D, N]
+            chunk_u = u[:, start:end]        # [B, chunk, D]
+            chunk_C = C[:, start:end]        # [B, chunk, N]
+
+            chunk_out = []
+            for t in range(chunk_len):
+                h = chunk_dA[:, t] * h + chunk_dB[:, t] * chunk_u[:, t, :, None]
+                y_t = (h * chunk_C[:, t, None, :]).sum(dim=-1)
+                chunk_out.append(y_t)
+
+            outputs.extend(chunk_out)
+
         return torch.stack(outputs, dim=1)
 
 
@@ -75,7 +102,12 @@ class MambaBlock(nn.Module):
     def __init__(self, d_model: int, d_state: int = 64, d_conv: int = 4, expand: int = 2, norm_eps: float = 1e-6):
         super().__init__()
         self.norm = RMSNorm(d_model, eps=norm_eps)
-        self.ssm = SelectiveSSM(d_model, d_state, d_conv, expand)
+        if HAS_CUDA_MAMBA:
+            self.ssm = CudaMamba(d_model, d_state=d_state, d_conv=d_conv, expand=expand)
+            self.use_cuda = True
+        else:
+            self.ssm = SelectiveSSM(d_model, d_state, d_conv, expand)
+            self.use_cuda = False
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return x + self.ssm(self.norm(x))
