@@ -44,7 +44,10 @@ class Trainer:
         self.optimizer = get_optimizer(model, optimizer_name, lr, weight_decay)
         self.scheduler = get_wsd_scheduler(self.optimizer, warmup_steps, stable_steps, decay_steps)
 
-        self.scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
+        # GradScaler only needed for fp16, not bf16
+        self.use_scaler = use_amp  # will be overridden to False for bf16
+        self.scaler = torch.amp.GradScaler("cuda", enabled=False)
+        self.amp_dtype = torch.bfloat16
         self.global_step = 0
         self.best_loss = float("inf")
 
@@ -71,20 +74,20 @@ class Trainer:
                 input_ids = batch["input_ids"].to(self.device)
                 labels = batch["labels"].to(self.device)
 
-                with torch.amp.autocast("cuda", dtype=torch.bfloat16, enabled=self.use_amp):
+                with torch.amp.autocast("cuda", dtype=self.amp_dtype, enabled=self.use_amp):
                     outputs = self.model(input_ids, labels=labels)
                     loss = outputs["loss"] / self.grad_accum_steps
 
-                self.scaler.scale(loss).backward()
+                loss.backward()
                 running_loss += loss.item()
 
                 if (self.global_step + 1) % self.grad_accum_steps == 0:
-                    self.scaler.unscale_(self.optimizer)
                     nn.utils.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
-                    self.scaler.step(self.optimizer)
-                    self.scaler.update()
+                    self.optimizer.step()
                     self.optimizer.zero_grad()
                     self.scheduler.step()
+                    if self.device == "cuda":
+                        torch.cuda.empty_cache()
                     if self.device == "cuda":
                         torch.cuda.empty_cache()
 
@@ -150,7 +153,7 @@ class Trainer:
                 input_ids = batch["input_ids"].to(self.device)
                 labels = batch["labels"].to(self.device)
 
-                with torch.amp.autocast("cuda", dtype=torch.bfloat16, enabled=self.use_amp):
+                with torch.amp.autocast("cuda", dtype=self.amp_dtype, enabled=self.use_amp):
                     outputs = self.model(input_ids, labels=labels)
 
                 total_loss += outputs["loss"].item()
