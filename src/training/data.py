@@ -1,10 +1,12 @@
 import torch
+import numpy as np
 from torch.utils.data import Dataset, IterableDataset
 
 
 class PreTokenizedDataset(Dataset):
     def __init__(self, data_path: str, seq_len: int = 4096):
-        self.tokens = torch.load(data_path, weights_only=True)
+        # Memory-mapped loading: only loads tokens when accessed, not all at once
+        self.tokens = torch.load(data_path, weights_only=True, mmap=True)
         self.seq_len = seq_len
 
     def __len__(self) -> int:
