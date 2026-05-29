@@ -30,10 +30,20 @@ class Trainer:
         use_amp: bool = True,
         optimizer_name: str = "adamw8bit",
     ):
+        # Check GPU availability
+        if device == "cuda" and not torch.cuda.is_available():
+            raise RuntimeError(
+                "CUDA not available! Enable GPU:\n"
+                "  Colab: Runtime → Change runtime type → T4 GPU\n"
+                "  Kaggle: Right panel → Accelerator → GPU T4 x2\n"
+                "  Lightning: Add GPU in Studio settings"
+            )
+
         self.model = model.to(device)
         self.train_dataloader = train_dataloader
         self.val_dataloader = val_dataloader
         self.device = device
+        print(f"Model on: {next(self.model).device}")
         self.grad_accum_steps = grad_accum_steps
         self.max_grad_norm = max_grad_norm
         self.checkpoint_dir = Path(checkpoint_dir)
